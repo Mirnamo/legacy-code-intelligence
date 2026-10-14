@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import tempfile
+import os
 import zipfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from .analyzer import analyze_directory
 from .archive import UnsafeArchive, extract_safely
@@ -44,4 +47,14 @@ async def analyze(file: UploadFile = File(...)) -> Report:
             raise HTTPException(400, str(exc)) from exc
         finally:
             await file.close()
-        return analyze_directory(source, Path(file.filename).stem)
+        entries = list(source.iterdir()) if source.exists() else []
+        if len(entries) == 1 and entries[0].is_dir():
+            source = entries[0]
+        return await run_in_threadpool(analyze_directory, source, Path(file.filename).stem)
+
+
+# Production bundles serve the built dashboard and API from the same origin.
+static_path = Path(os.environ.get("FRONTEND_DIST", Path(__file__).parent.parent / "web"))
+if static_path.is_dir():
+    app.mount("/", StaticFiles(directory=static_path, html=True), name="dashboard")
+
