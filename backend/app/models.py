@@ -24,6 +24,7 @@ class FileReport(BaseModel):
     symbols: list[Symbol]
     imports: list[str]
     findings: list[Finding]
+    complexity: list[dict] = Field(default_factory=list)
 
 
 class Dependency(BaseModel):
@@ -49,5 +50,6 @@ class Report(BaseModel):
     dependencies: list[Dependency]
     recommendations: list[str]
     change_impact: dict = Field(default_factory=dict)
+    documentation: str = ""
 
 
