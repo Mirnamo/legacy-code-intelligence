@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import stat
 import zipfile
 from pathlib import Path
 
@@ -24,6 +25,10 @@ def extract_safely(archive: Path, destination: Path) -> None:
             raise UnsafeArchive("Expanded archive would exceed 40 MB")
         root = destination.resolve()
         for entry in entries:
+            if entry.filename.startswith(("/", "\\")) or "\\" in entry.filename or ":" in entry.filename or ".." in Path(entry.filename).parts:
+                raise UnsafeArchive("Archive contains an unsafe path")
+            if stat.S_ISLNK(entry.external_attr >> 16):
+                raise UnsafeArchive("Archive contains a symbolic link")
             target = (destination / entry.filename).resolve()
             if root not in target.parents and target != root:
                 raise UnsafeArchive("Archive contains an unsafe path")
@@ -33,4 +38,5 @@ def extract_safely(archive: Path, destination: Path) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             with bundle.open(entry) as source, target.open("wb") as output:
                 shutil.copyfileobj(source, output)
+
 
