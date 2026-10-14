@@ -4,6 +4,7 @@ import "./styles.css";
 
 import { analyzeSources } from "./analyzer";
 import demo from "./demo.json";
+const API = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 function App() {
   const [report, setReport] = useState(null);
@@ -12,6 +13,7 @@ function App() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
 
+  const [mode, setMode] = useState(API ? "server" : "browser");
   const worker = React.useRef(null);
   useEffect(() => { loadDemo(); return () => worker.current?.terminate(); }, []);
 
@@ -27,6 +29,11 @@ function App() {
     setError("");if(!file.name.toLowerCase().endsWith('.zip')){setError('Choose a ZIP archive.');return;}
     if(file.size>15*1024*1024){setError('ZIP exceeds the 15 MB limit.');return;}
     setBusy(true);setReport(null);setSelected(null);
+    if(mode==="server"){
+      try{const form=new FormData();form.append("file",file);const response=await fetch(`${API}/api/analyze`,{method:"POST",body:form,signal:AbortSignal.timeout(120000)});if(!response.ok){const body=await response.json();throw Error(typeof body.detail==="string"?body.detail:"Analysis failed");}const data=await response.json();setReport({...data,limitations:"Python backend analysis: Python syntax parsing, function-length checks, and static risk rules. Findings still require engineering review."});}
+      catch(e){setError(`Python analysis failed: ${e.message}. You can explicitly choose Browser analysis and select your ZIP again.`);}
+      finally{setBusy(false);}return;
+    }
     try{
       const buffer=await file.arrayBuffer();worker.current?.terminate();
       const w=new Worker(new URL('./analysis-worker.js',import.meta.url),{type:'module'});worker.current=w;
@@ -44,7 +51,7 @@ function App() {
   return <main>
     <nav><div className="mark">LCI</div><span>Legacy Code Intelligence</span><div className="navActions"><button className="ghost" disabled={busy} onClick={loadDemo}>Demo</button><label className="upload">Analyze ZIP<input type="file" accept=".zip" disabled={busy} onChange={upload}/></label></div></nav>
     <header><div><p className="eyebrow">CODEBASE ASSESSMENT</p><h1>Understand before<br/><em>you modernize.</em></h1><p className="lede">Map an unfamiliar application, expose maintenance risks, and build an evidence-backed modernization plan.</p></div><div className="radar"><div><strong>{report?.summary.average_score ?? "—"}</strong><span>Health score</span></div></div></header>
-    <p>ZIP analysis stays in your browser. Limit: 15 MB compressed, 40 MB expanded, 2,000 entries, 750 KB per file.</p>
+    <label>Analysis mode <select aria-label="Analysis mode" value={mode} disabled={busy} onChange={e=>{setMode(e.target.value);setReport(null);setSelected(null);}}><option value="server" disabled={!API}>Python backend{!API?" (not configured)":""}</option><option value="browser">Browser analysis (limited)</option></select></label><p>{mode==="server"?"ZIP files are uploaded to the configured Python server, analyzed temporarily, and deleted after analysis.":"ZIP analysis stays in your browser and uses approximate text patterns."} Maximum upload: 15 MB. The built-in demo always uses browser analysis.</p>
     {error && <div className="error">{error}</div>}
     {busy && <div className="loading">Analyzing structure, symbols, dependencies, and risks…</div>}
     {report && !busy && <>
