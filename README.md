@@ -86,16 +86,6 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-## Roadmap
-
-- Interactive dependency graph
-- GitHub repository ingestion through OAuth
-- Java, C/C++, PHP, REXX, and COBOL AST adapters
-- Historical churn and ownership analysis
-- Local Llama documentation summaries
-- PDF assessment export
-- Team workspaces and saved comparisons
-
 ## License
 
 MIT
