@@ -1,92 +1,27 @@
 # Legacy Code Intelligence
 
-A portfolio-ready codebase assessment tool that turns an unfamiliar ZIP archive into a searchable inventory, dependency map, risk report, and modernization plan.
+## Netlify visitor app
 
-## The business problem
+Visitors can analyze source ZIP archives directly in a browser worker without a backend. Source code is not uploaded or executed. Reports include language/file inventories, approximate symbols and imports, import relationships, branch-density signals, maintenance/possible-secret findings, rule-based health scores, modernization suggestions, and JSON export. A built-in demo works offline after loading the site.
 
-Teams inherit applications with missing documentation, unclear dependencies, oversized modules, embedded secrets, and risky modernization paths. Legacy Code Intelligence produces a fast first-pass assessment before engineers change the system.
+Browser analysis uses text patterns, not Python AST parsing. It does not validate Python syntax or measure function lengths. Results require human review; scores do not certify security or production readiness. Potential credential values are omitted from findings.
 
-## What the MVP analyzes
+Archive limits: 15 MB compressed, 40 MB expanded, 750 KB per entry, 2,000 entries, 30-second timeout. Unsafe paths are rejected; dependencies, generated folders, binary and invalid UTF-8 content are skipped. Archives are read in memory without filesystem extraction.
 
-- File and language inventory
-- Functions, classes, imports, and module relationships
-- Lines of code and complexity signals
-- Large-file, long-function, TODO, wildcard-import, debug-code, and possible-secret risks
-- Per-file health scores and evidence-backed findings
-- Prioritized modernization recommendations
-- JSON report export
-- Safe ZIP extraction with traversal, size, and file-count limits
+### Deploy to Netlify
 
-The analyzer is deterministic and does not upload code to an AI provider. It is designed as an explainable foundation for an optional local-LLM documentation layer.
+Import this GitHub repository, select `main`, and deploy. Root `netlify.toml` sets base `frontend`, build `npm ci && npm run build`, publish `dist`. No API URL or secret environment variables are needed.
 
-## Architecture
-
-```mermaid
-flowchart TD
-    A[ZIP upload] --> B[Safe extractor]
-    B --> C[Language analyzers]
-    C --> D[Symbols and imports]
-    C --> E[Risk rules]
-    D --> F[Assessment report]
-    E --> F
-    F --> G[React dashboard]
-```
-
-## Quick start
-
-### API
-
-```bash
-cd backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-### Dashboard
+### Verify locally
 
 ```bash
 cd frontend
-npm install
+npm ci
+npm test
+npm run build
 npm run dev
 ```
 
-Open `http://localhost:5173`. The API documentation is at `http://localhost:8000/docs`.
+## Original Python backend
 
-### Analyze the included sample
-
-```bash
-cd backend
-PYTHONPATH=. python -m app.cli ../sample/legacy_app
-```
-
-## API
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/health` | Service status |
-| `GET` | `/api/demo` | Analyze the built-in demonstration project |
-| `POST` | `/api/analyze` | Analyze an uploaded ZIP archive |
-
-## Safety boundaries
-
-- Archives are extracted into temporary directories and deleted after analysis.
-- Absolute paths, parent traversal, symlinks, oversized archives, and excessive file counts are rejected.
-- Binary files, dependencies, generated output, and common secret files are skipped.
-- Secret detection reports the key name and location, never the suspected value.
-- This is an assessment aid, not a security scanner or a substitute for engineering review.
-
-## Tests
-
-```bash
-cd backend
-pip install -r requirements-dev.txt
-pytest
-```
-
-## License
-
-MIT
-
+The FastAPI backend remains available for local use and Docker deployment. Its Python analyzer uses AST parsing; it is separate from the standalone Netlify browser app.
