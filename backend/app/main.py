@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import zipfile
 from pathlib import Path
@@ -12,7 +13,7 @@ from .archive import UnsafeArchive, extract_safely
 from .models import Report
 
 app = FastAPI(title="Legacy Code Intelligence", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173"], allow_methods=["GET", "POST"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",") if origin.strip()], allow_methods=["GET", "POST"], allow_headers=["*"])
 
 
 @app.get("/health")
