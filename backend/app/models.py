@@ -48,4 +48,6 @@ class Report(BaseModel):
     files: list[FileReport]
     dependencies: list[Dependency]
     recommendations: list[str]
+    change_impact: dict = Field(default_factory=dict)
+
 
