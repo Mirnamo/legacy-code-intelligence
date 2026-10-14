@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .models import Dependency, FileReport, Finding, Report, Summary, Symbol
 from .impact import analyze_impact
+from .documentation import python_metrics, generate_documentation
 
 LANGUAGES = {
     ".py": "Python", ".js": "JavaScript", ".jsx": "JavaScript",
@@ -113,20 +114,28 @@ def analyze_directory(root: Path, project_name: str | None = None) -> Report:
             symbols, imports = _generic_details(text)
             findings = []
         findings.extend(_risk_findings(text, lines))
-        reports.append(FileReport(path=relative, language=language, lines=lines, score=_score(findings), symbols=symbols, imports=imports, findings=findings))
+        complexity = python_metrics(text) if language == "Python" else []
+        for metric in complexity:
+            if metric["cyclomatic_estimate"] >= 11:
+                findings.append(Finding(rule="complex-function", severity="high", message=f'{metric["name"]} has estimated cyclomatic complexity {metric["cyclomatic_estimate"]}', line=metric["line"]))
+            elif metric["cyclomatic_estimate"] >= 6:
+                findings.append(Finding(rule="complex-function", severity="medium", message=f'{metric["name"]} has estimated cyclomatic complexity {metric["cyclomatic_estimate"]}', line=metric["line"]))
+        reports.append(FileReport(path=relative, language=language, lines=lines, score=_score(findings), symbols=symbols, imports=imports, findings=findings, complexity=complexity))
         dependencies.extend(Dependency(source=relative, target=target) for target in imports)
 
     languages = Counter(report.language for report in reports)
     high_risks = sum(item.severity == "high" for report in reports for item in report.findings)
     average = round(sum(report.score for report in reports) / len(reports)) if reports else 100
     recommendations = _recommend(reports, high_risks)
+    impact = analyze_impact(root, sources)
     return Report(
         project=project_name or root.name,
         summary=Summary(files=len(reports), lines=sum(x.lines for x in reports), symbols=sum(len(x.symbols) for x in reports), dependencies=len(dependencies), high_risks=high_risks, average_score=average, languages=dict(languages)),
         files=sorted(reports, key=lambda item: (item.score, -item.lines)),
         dependencies=dependencies,
         recommendations=recommendations,
-        change_impact=analyze_impact(root, sources),
+        change_impact=impact,
+        documentation=generate_documentation(project_name or root.name, reports, impact),
     )
 
 
