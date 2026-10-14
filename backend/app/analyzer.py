@@ -6,6 +6,7 @@ from collections import Counter
 from pathlib import Path
 
 from .models import Dependency, FileReport, Finding, Report, Summary, Symbol
+from .impact import analyze_impact
 
 LANGUAGES = {
     ".py": "Python", ".js": "JavaScript", ".jsx": "JavaScript",
@@ -93,6 +94,7 @@ def analyze_directory(root: Path, project_name: str | None = None) -> Report:
     root = root.resolve()
     reports: list[FileReport] = []
     dependencies: list[Dependency] = []
+    sources: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         if not path.is_file() or any(part in SKIP_DIRS for part in path.parts) or path.name in SKIP_FILES:
             continue
@@ -103,6 +105,7 @@ def analyze_directory(root: Path, project_name: str | None = None) -> Report:
         if text is None:
             continue
         relative = path.relative_to(root).as_posix()
+        sources[relative] = text
         lines = len(text.splitlines())
         if language == "Python":
             symbols, imports, findings = _python_details(text)
@@ -123,6 +126,7 @@ def analyze_directory(root: Path, project_name: str | None = None) -> Report:
         files=sorted(reports, key=lambda item: (item.score, -item.lines)),
         dependencies=dependencies,
         recommendations=recommendations,
+        change_impact=analyze_impact(root, sources),
     )
 
 
@@ -138,4 +142,5 @@ def _recommend(reports: list[FileReport], high_risks: int) -> list[str]:
         recommendations.append("Add a test harness around critical behavior before changing implementation details.")
     recommendations.append("Modernize incrementally: measure behavior, isolate one boundary, migrate it, and compare results.")
     return recommendations
+
 
