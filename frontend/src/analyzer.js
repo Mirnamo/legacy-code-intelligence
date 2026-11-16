@@ -1,34 +1,63 @@
 import {unzipSync} from 'fflate';
 const languages={py:'Python',js:'JavaScript',jsx:'JavaScript',ts:'TypeScript',tsx:'TypeScript',php:'PHP',java:'Java',c:'C',h:'C',cpp:'C++',cc:'C++',hpp:'C++',rexx:'REXX',rex:'REXX',cbl:'COBOL',cob:'COBOL',sql:'SQL'};
 const skip=/(^|\/)(\.git|node_modules|vendor|dist|build|\.venv|venv|coverage)(\/|$)/;
-export function analyzeSources(sources,project){
- const files=[],dependencies=[];
- for(const [path,text] of Object.entries(sources)){
-  const language=languages[path.split('.').pop().toLowerCase()];if(!language)continue;
-  const lines=text.split(/\r?\n/),symbols=[],imports=[],findings=[];
-  const add=(rule,severity,message,line)=>{if(findings.length<100)findings.push({rule,severity,message,line});};
-  lines.forEach((line,i)=>{
-   const symbol=/^\s*(?:(?:export|public|private|protected|async)\s+)*(function|class|def)\s+([\w$]+)/.exec(line);
-   if(symbol)symbols.push({name:symbol[2],kind:symbol[1]==='class'?'class':'function',line:i+1});
-   const arrow=/(?:const|let|var)\s+([\w$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>/.exec(line);
-   if(arrow)symbols.push({name:arrow[1],kind:'function',line:i+1});
-   for(const match of line.matchAll(/(?:from\s+['"]([^'"]+)['"]|require\(['"]([^'"]+)['"]\)|import\s+['"]([^'"]+)['"]|^\s*(?:from|import)\s+([\w.]+))/g))imports.push(match.slice(1).find(Boolean));
-   if(/\b(TODO|FIXME|HACK)\b/i.test(line))add('work-marker','low','Unresolved maintenance marker',i+1);
-   if(/\b(console\.log|print)\s*\(/.test(line))add('debug-output','low','Review debug output in application code',i+1);
-   if(/\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*['"][^'"]{8,}['"]/i.test(line))add('possible-secret','high','Possible hardcoded credential; value suppressed',i+1);
-   if(/^\s*from\s+[\w.]+\s+import\s+\*/.test(line))add('wildcard-import','medium','Wildcard import obscures dependencies',i+1);
-  });
-  if(lines.length>220)add('large-file',lines.length>400?'high':'medium',`File contains ${lines.length} lines`,null);
-  const branches=(text.match(/\b(if|elif|else if|for|while|case|catch)\b|&&|\|\|/g)||[]).length;
-  if(branches>30)add('branch-density','medium',`${branches} branch-like tokens; review complexity (not a cyclomatic measurement)`,null);
-  const unique=[...new Set(imports)];dependencies.push(...unique.map(target=>({source:path,target})));
-  const score=Math.max(0,100-findings.reduce((n,f)=>n+({high:22,medium:10,low:3}[f.severity]),0));
-  files.push({path,language,lines:lines.length,score,symbols,imports:unique,findings,branch_signals:branches});
- }
- if(!files.length)throw Error('No supported source files found in the archive.');
- files.sort((a,b)=>a.score-b.score||b.lines-a.lines);
- const high=files.reduce((n,f)=>n+f.findings.filter(x=>x.severity==='high').length,0);
- return {project,summary:{files:files.length,lines:files.reduce((n,f)=>n+f.lines,0),symbols:files.reduce((n,f)=>n+f.symbols.length,0),dependencies:dependencies.length,high_risks:high,average_score:Math.round(files.reduce((n,f)=>n+f.score,0)/files.length),languages:files.reduce((d,f)=>(d[f.language]=(d[f.language]||0)+1,d),{})},files,dependencies,recommendations:[...(high?['Triage high-priority findings and rotate any confirmed exposed credentials.']:[]),...(files.some(f=>f.lines>220)?['Add characterization tests before splitting oversized modules.']:[]),'Review import relationships and document stable module boundaries.','Modernize incrementally and compare behavior with tests.'],limitations:'Browser analysis uses text patterns, not a language parser. Symbols, imports, and branch signals may be incomplete or inaccurate. Health scores reflect configured rules, not verified security or production readiness. No Python syntax validation or function-length measurement is performed.'};
+export function describeProject({project, files, dependencies}) {
+  const inventory = files.map(({path, language, lines, symbols, imports}) => ({
+    path, language, lines, symbols, imports,
+  })).sort((a, b) => a.path.localeCompare(b.path));
+  const summary = {
+    files: inventory.length,
+    lines: inventory.reduce((total, file) => total + file.lines, 0),
+    symbols: inventory.reduce((total, file) => total + file.symbols.length, 0),
+    dependencies: dependencies.length,
+    languages: Object.create(null),
+  };
+  for (const {language} of inventory) {
+    summary.languages[language] = (summary.languages[language] || 0) + 1;
+  }
+  const recommendations = [
+    "Use the file inventory to find the entry point for one behavior you want to modernize.",
+  ];
+  if (dependencies.length) {
+    recommendations.push("Follow that file’s imports to decide which modules belong in the first migration slice.");
+  }
+  recommendations.push("Record how the behavior works today, then compare the same inputs and outputs after you migrate it.");
+  return {project, summary, files: inventory, dependencies, recommendations};
+}
+
+export function analyzeSources(sources, project) {
+  const files = [];
+  const dependencies = [];
+  for (const [path, source] of Object.entries(sources)) {
+    const language = languages[path.split('.').pop().toLowerCase()];
+    if (!language) continue;
+    const lines = source.split(/\r?\n/);
+    if (lines.at(-1) === '') lines.pop();
+    const symbols = [];
+    const imports = new Set();
+    lines.forEach((line, index) => {
+      const rexxLabel = language === 'REXX' && /^\s*([\w!?]+):/.exec(line);
+      const cobolSection = language === 'COBOL' && /^\s*(?:\d{6}\s+)?([\w-]+)\s+SECTION\s*\./i.exec(line);
+      const declaration = /^\s*(?:(?:export|default|public|private|protected|async)\s+)*(function|class|def)\s+([\w$]+)/.exec(line);
+      const arrow = /(?:const|let|var)\s+([\w$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>/.exec(line);
+      if (rexxLabel) {
+        symbols.push({name: rexxLabel[1], kind: 'label', line: index + 1});
+      } else if (cobolSection) {
+        symbols.push({name: cobolSection[1], kind: 'section', line: index + 1});
+      } else if (declaration) {
+        symbols.push({name: declaration[2], kind: declaration[1] === 'class' ? 'class' : 'function', line: index + 1});
+      } else if (arrow) {
+        symbols.push({name: arrow[1], kind: 'function', line: index + 1});
+      }
+      for (const match of line.matchAll(/(?:from\s+['"]([^'"]+)['"]|require\(['"]([^'"]+)['"]\)|import\s+['"]([^'"]+)['"]|^\s*(?:from|import)\s+([\w.]+))/g)) {
+        imports.add(match.slice(1).find(Boolean));
+      }
+    });
+    files.push({path, language, lines: lines.length, symbols, imports: [...imports]});
+    dependencies.push(...[...imports].map(target => ({source: path, target})));
+  }
+  if (!files.length) throw Error('No supported source files found in the archive.');
+  return describeProject({project, files, dependencies});
 }
 export function analyzeZip(buffer,project){
  const bytes=new Uint8Array(buffer);if(bytes.length>15*1024*1024)throw Error('ZIP exceeds the 15 MB limit.');

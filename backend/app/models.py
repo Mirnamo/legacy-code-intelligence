@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class Symbol(BaseModel):
@@ -9,21 +9,12 @@ class Symbol(BaseModel):
     line: int
 
 
-class Finding(BaseModel):
-    rule: str
-    severity: str
-    message: str
-    line: int | None = None
-
-
 class FileReport(BaseModel):
     path: str
     language: str
     lines: int
-    score: int = Field(ge=0, le=100)
     symbols: list[Symbol]
     imports: list[str]
-    findings: list[Finding]
 
 
 class Dependency(BaseModel):
@@ -37,8 +28,6 @@ class Summary(BaseModel):
     lines: int
     symbols: int
     dependencies: int
-    high_risks: int
-    average_score: int
     languages: dict[str, int]
 
 
@@ -48,4 +37,3 @@ class Report(BaseModel):
     files: list[FileReport]
     dependencies: list[Dependency]
     recommendations: list[str]
-

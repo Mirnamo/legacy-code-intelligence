@@ -21,11 +21,6 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/demo", response_model=Report)
-def demo() -> Report:
-    return analyze_directory(Path(__file__).parent.parent / "demo", "Atlas Billing (demo)")
-
-
 @app.post("/api/analyze", response_model=Report)
 async def analyze(file: UploadFile = File(...)) -> Report:
     if not file.filename or not file.filename.lower().endswith(".zip"):

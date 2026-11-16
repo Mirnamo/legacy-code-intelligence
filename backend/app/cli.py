@@ -7,7 +7,7 @@ from .analyzer import analyze_directory
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Assess a local codebase")
+    parser = argparse.ArgumentParser(description="Describe the structure of a local codebase")
     parser.add_argument("path", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
